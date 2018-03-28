@@ -1,8 +1,20 @@
 #include <iostream>
 #include <fcntl.h>
 #include <unistd.h>
-#include <cstring>
 #include "ResourceType.h"
+
+void printUnicodeASCII(char* string){
+    uint32_t length = 0;
+    while (1){
+        char highByte = ((string[length]) & 0xFF);
+        char lowByte = (string[length + 1] & 0xFF);
+        if(highByte == 0 && lowByte == 0)break;
+        if(lowByte != 0) printf("%c",lowByte);
+        length++;
+    }
+
+    printf("\n");
+}
 
 int main() {
     const char* androidManifestPath = "../AndroidManifest.xml";
@@ -31,24 +43,23 @@ int main() {
 
     lseek(fd, (pStringPoolInfo->mOffsetInFile + pStringPoolHeader->mHeader.mHeaderSize), SEEK_SET);
     int readCount = read(fd,mStringOffsets, mStringOffsetsSize);
-    for (int j = 0; j < pStringPoolHeader->mStringCount; ++j) {
-        printf("String[%d] Offset: %d\n", j, mStringOffsets[j]);
-    }
+
     if(readCount != mStringOffsetsSize) return  errno;
     if(is16BitUnicode){
-        uint32_t mStringsSize = sizeof(char16_t) * pStringPoolHeader->mStringCount;
-        char16_t* mStrings = (char16_t*)malloc(mStringsSize);
+        uint32_t mStringsSize = pStringPoolHeader->mHeader.mChunkSize -
+                               pStringPoolHeader->mHeader.mHeaderSize -
+                               pStringPoolHeader->mStringCount * sizeof(uint32_t);
+
+        char* mStrings = (char*)malloc(mStringsSize);
         if(mStrings == NULL)return -1;
 
         uint32_t stringsOffset = pStringPoolInfo->mOffsetInFile + pStringPoolHeader->mStringStart;
         lseek(fd, stringsOffset, SEEK_SET);
         readCount = read(fd, mStrings, mStringsSize);
         if(readCount != mStringsSize) return -1;
-        printf("mStrings: %ls\n", mStrings);
+
         for (int i = 0; i < pStringPoolHeader->mStringCount; ++i) {
-//            printf("String[%d], offset: %d, Content: %ls\n",
-//            i, mStringOffsets[i], (mStringOffsets + mStringOffsets[i]));
-//            printf("%ls\n",(mStrings+mStringOffsets[i]));
+            printUnicodeASCII((mStrings+mStringOffsets[i]));
         }
         free(mStrings);
     } else{
@@ -71,9 +82,6 @@ int main() {
 
     free(mStringOffsets);
     close(fd);
-
-
-
     free(pStringPoolHeader);
     freeChunkList();
     return 0;
